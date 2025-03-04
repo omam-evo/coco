@@ -1,7 +1,7 @@
 clear
 
 % path to the MATLAB build
-addpath('..\mat_v4','..\mat_v4\es_for_meta');
+addpath('..\opt','..\opt\subroutines');
 
 % only suit name (bbob), no logger
 rng(1);
@@ -13,8 +13,9 @@ fcts = 24; inst = 15; dims = 6;
 get_f = 17;
 get_N = 4;  %[2,3,5,10,20,40]
 get_inst = 1;
-BUDGET_MULTIPLIER = 1e5;
+BUDGET_MULTIPLIER = 1e4;
 
+VERBOSE = 1;
 STOP.G_MAX = 1e9;
 STOP.X_TOL = 1e-12;
 STOP.SIGMA_D_STOP = 1e-12;
@@ -22,22 +23,22 @@ STOP.COND_SQRT = 1e7;
 STOP.SIGMA_STOP = nan;
 STOP.F_STAG_TOL = 1e-12;
 
-NUM_PLOTS_SHOW = 0;
+NUM_PLOTS_SHOW = 1;
 
 problem_id = (get_inst-1)+(get_f-1)*inst + fcts*inst*(get_N-1); 
-bbob_problem = cocoSuiteGetProblem(suite, problem_id);
-str_problem = cocoProblemGetName(bbob_problem);
-F_STOP = cocoProblemGetBestValue(bbob_problem);
-N = cocoProblemGetDimension(bbob_problem);
+bbob = cocoSuiteGetProblem(suite, problem_id);
+str_problem = cocoProblemGetName(bbob);
+F_STOP = cocoProblemGetBestValue(bbob);
+N = cocoProblemGetDimension(bbob);
 
 %get dimension, lower bounds, upper bounds and a starting point
-lb = cocoProblemGetSmallestValuesOfInterest(bbob_problem);
-ub = cocoProblemGetLargestValuesOfInterest(bbob_problem);
+lb = cocoProblemGetSmallestValuesOfInterest(bbob);
+ub = cocoProblemGetLargestValuesOfInterest(bbob);
 lb = lb'; ub = ub';
-x0 = cocoProblemGetInitialSolution(bbob_problem); 
+x0 = cocoProblemGetInitialSolution(bbob); 
 
 %define the function to minimize from the problem
-fun = @(x) cocoEvaluateFunction(bbob_problem,x);
+fun = @(x) cocoEvaluateFunction(bbob,x);
 
 %optimize with your favourite method
 % options = optimset('Display','iter','MaxFunEvals',200*dim);
@@ -47,9 +48,9 @@ fun = @(x) cocoEvaluateFunction(bbob_problem,x);
 
 i = 1;
 % figure; hold on;
-while BUDGET_MULTIPLIER*N > cocoProblemGetEvaluations(bbob_problem)
+while BUDGET_MULTIPLIER*N > cocoProblemGetEvaluations(bbob)
     
-    feval_remain = BUDGET_MULTIPLIER*N-cocoProblemGetEvaluations(bbob_problem);
+    feval_remain = BUDGET_MULTIPLIER*N-cocoProblemGetEvaluations(bbob);
     STOP.FEVAL_MAX = feval_remain;
 
     %% Init
@@ -64,26 +65,41 @@ while BUDGET_MULTIPLIER*N > cocoProblemGetEvaluations(bbob_problem)
         SHOW_PLOW = 0;
     end
 
-    %% APOP
-    % [xmin,fmin,~] = apop_cma_es(fun, bbob_problem, mu, lambda, x0, sigma0, STOP, 1, SHOW_PLOW);
+    %% purecmaes basic from Hansen
+    % [x,f,~] = purecmaes_basic(fun, bbob, mu, lambda, x0, sigma0, STOP, VERBOSE);
 
-    %% LRA
-    % [xmin,fmin,~] = lra_cma_es(fun, bbob_problem, mu, lambda, x0, sigma0, STOP, SHOW_PLOW);
-    
-    %% PSA
-    % [xmin,fmin,~] = psa_cma_es(fun, bbob_problem, mu, lambda, x0, sigma0, STOP, SHOW_PLOW);
+    %% BIPOP-CMA-ES
+    % [x,f,~] =  bipop_cma_es(fun, bbob, mu, lambda, x0, lb, ub, sigma0, STOP, VERBOSE);
 
-    %% BIPOP
-    % [xmin,fmin,~] = bipop_cma_es(fun, bbob_problem, mu, lambda, x0, lb, ub, sigma0, STOP, SHOW_PLOW);
+    %% CMSA-ES
+    % [x,f,~] =  cmsa_es(fun, bbob, mu, lambda, x0, sigma0, STOP, VERBOSE);
 
-    %% CMSA
-    % [xmin,fmin,~] = cmsa_es(fun, bbob_problem, mu, lambda, x0, sigma0, STOP, SHOW_PLOW);
+    %% MA-ES
+    % ma_es(fun, bbob, mu, lambda, x0, sigma0, STOP, VERBOSE);
 
-    %% META-ES
-    lambda = 2^5;
-    mu = lambda/2;
-    [x,f,~] = meta_es(fun,bbob_problem, mu, lambda, x0,sigma0, STOP, SHOW_PLOW);
+    %% Meta-ES
+    % isolation_factor = 10;
+    % lambda = 128;
+    % mu = lambda/2;
+    % [x,f,~] = meta_es(fun,bbob, mu, lambda, isolation_factor, x0, sigma0, STOP, VERBOSE);
 
+    %% PSA-CMA-ES
+    % [x,f,~] =  psa_cma_es(fun, bbob, mu, lambda, x0, sigma0, STOP, VERBOSE);
+
+    %% APOP-CMA-ES
+    [x,f,~] =  apop_cma_es(fun, bbob, mu, lambda, x0, sigma0, STOP, 1, VERBOSE);
+
+    %% LRA-CMA-ES
+    % [x,f,~] =  lra_cma_es(fun, bbob, mu, lambda, x0, sigma0, STOP, VERBOSE);
+
+    %% ETA-CMA-ES
+    % STOP.SIGMA_STOP = 1e-8;
+    % lambda = max(10,double(N));
+    % mu = lambda/2;
+    % [x,f,~] =  eta_cma_es(fun, bbob, mu, lambda, x0, sigma0, STOP, VERBOSE);
+
+    %% Apply offset of -F_STOP to obtain strictly positive f-dynamics 
+    % => needed for logarithmic axis
     if i<=NUM_PLOTS_SHOW
         fig = gcf;
         lineObjs = findobj(fig, 'type', 'line');
@@ -92,7 +108,7 @@ while BUDGET_MULTIPLIER*N > cocoProblemGetEvaluations(bbob_problem)
         end
     end
 
-    if cocoProblemFinalTargetHit(bbob_problem)
+    if cocoProblemFinalTargetHit(bbob)
         break;
     end
     % plot(f_g-F_STOP, '-'); 
@@ -104,7 +120,7 @@ end
 %xlabel('g'); ylabel('f(g)-F');
 
 
-if cocoProblemFinalTargetHit(bbob_problem)
+if cocoProblemFinalTargetHit(bbob)
     disp(['success: ',str_problem]);
 else
     disp(['fail: ',str_problem]);
